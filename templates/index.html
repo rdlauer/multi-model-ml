@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+
+    <title>Edge Impulse</title>
+</head>
+
+<body>
+
+    <div class="container col-xxl-8 px-4 py-5">
+        <img class="d-block mx-auto mb-4" src="assets/EI_logo_stacked.png" alt="" width="200">
+        <hr>
+        <div class="row">
+            <div class="col-8 text-center">
+                <h2>High-Resolution Camera Feed</h2>
+                <p class="mb-4">This is the original high-res video feed directly from the camera.</p>
+                <img src="{{ url_for('high_res_video_feed') }}" class="d-block mx-lg-auto img-fluid"
+                    alt="High-res Video" width="800" loading="lazy">
+            </div>
+            <div class="col-4 text-center">
+                <h2>Inference Results</h2>
+                <p class="mb-4">This feed shows the object detection results with centroids after inference.</p>
+                <img src="{{ url_for('object_detection_feed') }}" class="img-fluid border rounded-3 mb-4" width="400"
+                    alt="Processed Inference Feed" loading="lazy">
+                <div class="col-lg-6 mx-auto">
+                    <p class="">Inference speed: <span id="inference_speed"></span> ms</p>
+                    <p class="">Objects detected: <span id="object_counter"></span></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- New Section to display bounding boxes dynamically -->
+        <div class="row">
+            <div class="col-6">
+                <h2 class="text-center">Extracted Objects</h2>
+            </div>
+            <div class="col-6">
+                <h2 class="text-center">Anomaly Results</h2>
+            </div>
+            <p></p>
+            <div class="col-12" id="bounding-boxes">
+                <!-- Bounding boxes will be added dynamically as new rows -->
+            </div>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        var sourceInference = new EventSource("/inference_speed");
+        sourceInference.onmessage = function (event) {
+            document.getElementById("inference_speed").textContent = event.data;
+        }
+
+        var sourceObjects = new EventSource("/object_counter");
+        sourceObjects.onmessage = function (event) {
+            document.getElementById("object_counter").textContent = event.data;
+        }
+
+        // Function to dynamically add a new row with object information and thumbnails
+        function addBoundingBox(box, index) {
+            var rowDiv = document.createElement('div');
+            rowDiv.className = "row mb-3";  // New row for each object
+
+            var colDiv = document.createElement('div');
+            colDiv.className = "col-12 col-md-4";  // Column for object info
+
+            var p = document.createElement('p');
+            p.innerHTML = `<strong>Label:</strong> ${box.label} <br>
+                       <strong>Confidence:</strong> ${box.confidence.toFixed(2)} <br>
+                       <strong>Coordinates:</strong> (X: ${box.x}, Y: ${box.y}, Width: ${box.width}, Height: ${box.height})`;
+            colDiv.appendChild(p);
+
+            var imgDiv = document.createElement('div');
+            imgDiv.className = "col-12 col-md-4";  // Column for the cropped image
+
+            var img = document.createElement('img');
+            img.src = `data:image/jpeg;base64,${box.cropped_image}`;  // Cropped image
+            img.className = "img-fluid mb-2";
+            img.width = 96;
+            img.height = 96;
+            img.alt = "Cropped Object";
+            imgDiv.appendChild(img);
+
+            var anomalyDiv = document.createElement('div');
+            anomalyDiv.className = "col-12 col-md-4";  // Column for the anomaly grid image
+
+            var anomalyImg = document.createElement('img');
+            anomalyImg.src = `data:image/jpeg;base64,${box.anomaly_grid_image}`;  // Cropped image with anomaly grid
+            anomalyImg.className = "img-fluid mb-2";
+            anomalyImg.width = 96;
+            anomalyImg.height = 96;
+            anomalyImg.alt = "Anomaly Grid";
+            anomalyDiv.appendChild(anomalyImg);
+
+            // Append all divs to the row
+            rowDiv.appendChild(colDiv);
+            rowDiv.appendChild(imgDiv);
+            rowDiv.appendChild(anomalyDiv);
+
+            document.getElementById("bounding-boxes").appendChild(rowDiv);
+        }
+
+        // Function to fetch bounding boxes every second
+        function fetchBoundingBoxes() {
+            fetch("{{ url_for('extracted_objects_feed') }}")
+                .then(response => response.json())
+                .then(boxes => {
+                    document.getElementById("bounding-boxes").innerHTML = "";
+                    boxes.forEach((box, index) => {
+                        addBoundingBox(box, index);
+                    });
+                });
+        }
+
+        // Fetch bounding boxes every second
+        setInterval(fetchBoundingBoxes, 200);
+    </script>
+</body>
+
+</html>
